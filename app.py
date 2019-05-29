@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*- #
 
-from flask import Flask, redirect,render_template, session, url_for
+from flask import Flask, redirect,render_template, session, url_for, flash
 from flask_script import Manager
 from flask_bootstrap import Bootstrap  #推特做的CSS框架
 from flask_moment import Moment        #本地化日期和时间包
@@ -23,7 +23,10 @@ class NameForm(FlaskForm):
 def index():
     form = NameForm()
     if form.validate_on_submit():   #验证表单，即DataRequired()函数是否验证成功
-        session['name'] = form.name.data
+        old_name = session.get('name')
+        if old_name is not None and old_name != form.name.data:
+            flash('你已经更改了你的用户名！')  #如果更改新的name那就会显示一个消息提示
+        session['name'] = form.name.data   #利用会话保存POST的数据，防止下面重定向丢失数据
         return redirect(url_for('index'))  #重定向到index路由，即重新运行了一遍index(),此时为GET请求，不运行if语句
     return render_template('index.html', form=form, name=session.get('name'), current_time=datetime.utcnow())
     #使用get()方法，如果session中没有'name'键值对时，返回默认值None

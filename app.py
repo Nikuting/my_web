@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*- #
 
-from flask import Flask, redirect,render_template, sessions, url_for
+from flask import Flask, redirect,render_template, session, url_for
 from flask_script import Manager
 from flask_bootstrap import Bootstrap  #推特做的CSS框架
 from flask_moment import Moment        #本地化日期和时间包
@@ -21,14 +21,12 @@ class NameForm(FlaskForm):
 #主页网页
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    name = None
     form = NameForm()
     if form.validate_on_submit():   #验证表单，即DataRequired()函数是否验证成功
-        name = form.name.data
-        form.name.data = ''         #让提交后的页面Name栏为空
-
-        return redirect(url_for('index'))
-    return render_template('index.html', form=form, name=name, current_time=datetime.utcnow())
+        session['name'] = form.name.data
+        return redirect(url_for('index'))  #重定向到index路由，即重新运行了一遍index(),此时为GET请求，不运行if语句
+    return render_template('index.html', form=form, name=session.get('name'), current_time=datetime.utcnow())
+    #使用get()方法，如果session中没有'name'键值对时，返回默认值None
 
 #404界面
 @app.errorhandler(404)

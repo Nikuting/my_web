@@ -8,12 +8,41 @@ from flask_wtf import FlaskForm    #tf扩展的表单类
 from wtforms import StringField, SubmitField    #1.文本字段类，2.提交表单类
 from wtforms.validators import DataRequired
 from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy  #导入数据库
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '123456'
+basedir = os.path.abspath(os.path.dirname(__file__))    #得到当前文件根目录的绝对路径
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'data.db?check_same_thread=False') #创建数据库URL
+#data.db后面的？的一段是为了保证session在同一个theard中运行，否则会报错
+app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True   #每次请求结束后都会自动提交数据库中的变动
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
+db = SQLAlchemy(app)  #实例化数据库
 bootstrap = Bootstrap(app)
 moment = Moment(app)
 
+#定义数据库模型（即一个模型代表一个表）
+class Role(db.Model):
+    __tablename__ = 'roles'  #设置类在数据库中使用的表名，
+    id = db.Column(db.Integer, primary_key=True)  #定义Role表主键
+    name = db.Column(db.String(64), unique=True)
+    users = db.relationship('User', backref='role', lazy='dynamic')
+
+    def __repr__(self):      #返回一个具有可读性的字符串表示模型，调试或测试中使用
+        return '<Role %r>' % self.name
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, index=True)
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))  #定义role_id为外键，为roles表的id值
+    #即这一列代表user对应的role
+
+    def __repr__(self):
+        return '<User %r>' % self.username
+
+#定义POST的表单类
 class NameForm(FlaskForm):
     name = StringField('Name:', validators=[DataRequired()])  #实例化文本字段
     submit = SubmitField('Submit')      #实例化提交按钮
@@ -23,13 +52,17 @@ class NameForm(FlaskForm):
 def index():
     form = NameForm()
     if form.validate_on_submit():   #验证表单，即DataRequired()函数是否验证成功
-        old_name = session.get('name')
-        if old_name is not None and old_name != form.name.data:
-            flash('你已经更改了你的用户名！')  #如果更改新的name那就会显示一个消息提示
-        session['name'] = form.name.data   #利用会话保存POST的数据，防止下面重定向丢失数据
-        return redirect(url_for('index'))  #重定向到index路由，即重新运行了一遍index(),此时为GET请求，不运行if语句
-    return render_template('index.html', form=form, name=session.get('name'), current_time=datetime.utcnow())
-    #使用get()方法，如果session中没有'name'键值对时，返回默认值None
+        user = User.query.filter_by(username=form.name.data).first()  #如果数据库中有对应的用户则赋给user
+        if user is None:        #如果没有哪就以POST的表单用户名在数据库中建立对应值
+            user = User(username=form.name.data)
+            db.session.add(user)
+            session['known'] = False #数据库中是否有该用户，来输出不同的欢迎语
+        else:
+            session['known'] = True
+        session['name'] = form.name.data
+        form.name.data = ''
+        return redirect(url_for('index'))
+    return render_template('index.html', form = form, name=session.get('name'), known=session.get('known', False), current_time = datetime.utcnow())
 
 #404界面
 @app.errorhandler(404)

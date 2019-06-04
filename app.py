@@ -9,6 +9,8 @@ from wtforms import StringField, SubmitField    #1.文本字段类，2.提交表
 from wtforms.validators import DataRequired
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy  #导入数据库
+from flask_mail import Mail, Message   #导入包装了smtplib的扩展
+from threading import Thread #异步不同线程
 import os
 
 app = Flask(__name__)
@@ -18,9 +20,40 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'da
 #data.db后面的？的一段是为了保证session在同一个theard中运行，否则会报错
 app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True   #每次请求结束后都会自动提交数据库中的变动
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
+
+#配置Flask-Mail来使用Email发送邮件
+app.config['MAIL_SERVER'] = 'smtp.qq.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = '1740454139@qq.com'
+app.config['MAIL_PASSWORD'] = 'ndcmpuzxyzofdeii'
+
+#集成发送mail消息功能
+app.config['FLASKY_MAIL_SUBJECT_PREFIX'] = '[Flask of Daxia]'   #定义邮件主题的前缀
+app.config['FLASKY_MAIL_SENDER'] = 'Flasky Admin <1740454139@qq.com>'   #定义发件人地址
+
+mail = Mail(app)  #实例化Mail
 db = SQLAlchemy(app)  #实例化数据库
 bootstrap = Bootstrap(app)
 moment = Moment(app)
+
+#电子邮件功能支持
+def send_eamil(to, subject, template, **kwargs):
+    #用Message类定义发送的主题，发收件人
+    msg = Message(app.config['FLASKY_MAIL_SUBJECT_PREFIX'] + subject, sender=
+                  app.config['FLASKY_MAIL_SENDER'], recipients=[to])
+    msg.body = render_template(template + '.txt', **kwargs)
+    msg.html = render_template(template + '.html', **kwargs)
+    thr = Thread(target=send_asyn_email, args=[app, msg])
+    thr.start()
+    return thr
+
+#异步发送电子邮件
+def send_asyn_email(app, msg):
+    with app.app_context():
+        mail.send(msg)
+
+
 
 #定义数据库模型（即一个模型代表一个表）
 class Role(db.Model):
@@ -57,6 +90,7 @@ def index():
             user = User(username=form.name.data)
             db.session.add(user)
             session['known'] = False #数据库中是否有该用户，来输出不同的欢迎语
+            send_eamil('1014586949@qq.com', 'New User', 'mail/new_user', user=user)
         else:
             session['known'] = True
         session['name'] = form.name.data
